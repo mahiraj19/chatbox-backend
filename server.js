@@ -38,6 +38,7 @@ mongoose.connect(MONGO_URI, {
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/chatrequest', require('./routes/chatRequestsRoutes'));
 
 // Store connected users
 let onlineUsers = new Map();
@@ -48,14 +49,57 @@ io.on('connection', (socket) => {
     // Handle user joining
     socket.on('joinRoom', (userId) => {
         socket.join(userId);
-        onlineUsers.set(userId, socket.id); // Store user ID and socket ID
-        console.log(`User ${userId} joined their room`);
+        onlineUsers.set(userId, socket.id); 
+        // console.log(`User ${userId} joined their room`);
 
         // Emit 'userOnline' to all clients when a user goes online
         io.emit('userOnline', userId);
     });
 
-    // Handle sending messages
+    // Handle typing events
+    socket.on('typing', (receiverId) => {
+        socket.to(receiverId).emit('typing');
+    });
+
+    socket.on('stopTyping', (receiverId) => {
+        socket.to(receiverId).emit('stopTyping');
+    });
+
+            // Emit `updateRequests` for real-time updates to all clients
+        socket.on('chatRequestSent', ({ senderId, receiverId, senderName }) => {
+            const receiverSocketId = onlineUsers.get(receiverId);
+            //  console.log(receiverSocketId, 'receiverSocketId');
+             
+            if (receiverSocketId) {
+                io.to(receiverSocketId).emit('chatRequestReceived', {
+                    senderId,
+                    senderName,
+                });
+            }
+
+            io.emit('updateRequests'); // Notify all clients to update their request lists
+        });
+
+        socket.on('chatRequestAccepted', ({ requestId, senderId }) => {
+            const senderSocketId = onlineUsers.get(senderId);
+            if (senderSocketId) {
+                io.to(senderSocketId).emit('chatRequestAccepted', { requestId, senderId });
+            }
+
+            io.emit('updateRequests'); // Notify all clients
+        });
+
+        socket.on('chatRequestRejected', ({ requestId, senderId }) => {
+            const senderSocketId = onlineUsers.get(senderId);
+            console.log(senderSocketId, 'senderSocketId');
+            
+            if (senderId) {
+                io.to(senderSocketId).emit('chatRequestRejected', { requestId, senderId });
+            }
+
+            io.emit('updateRequests'); // Notify all clients
+        });
+
     socket.on('sendMessage', (data) => {
         const { sender, receiver, content } = data;
         const newMessage = { sender, receiver, content, timestamp: new Date() };
@@ -82,6 +126,12 @@ io.on('connection', (socket) => {
         if (offlineUserId) {
             io.emit('userOffline', offlineUserId);
         }
+    });
+
+    // Optional: Reconnection logic
+    socket.on('reconnect', () => {
+        console.log(`Client ${socket.id} reconnected.`);
+        // You can add additional logic for handling reconnected users here if needed
     });
 });
 

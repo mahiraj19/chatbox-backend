@@ -2,8 +2,8 @@ const User = require('../models/User');
 
 exports.getUsers = async (req, res) => {
     try {
-        // Use User.find() to fetch all users
-        const users = await User.find(); // Retrieves all user documents from the database
+        // Exclude the logged-in user by using their ID from the request object
+        const users = await User.find({ _id: { $ne: req.user.id } });
         res.json(users);
     } catch (err) {
         console.error(err.message);

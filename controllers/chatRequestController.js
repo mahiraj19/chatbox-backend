@@ -1,12 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const Message = require('../models/Message');
-const authMiddleware = require('../middleware/auth'); // Middleware to protect routes
-const ChatRequest = require('../models/ChatRequest');
 const mongoose = require('mongoose');
+const Message = require('../models/Message');
+const ChatRequest = require('../models/ChatRequest');
+const User = require('../models/User');
 
-// Route to get messages between two users
-router.get('/:userId', authMiddleware, async (req, res) => {
+// Get messages between two users
+exports.getMessages = async (req, res) => {
     try {
         const messages = await Message.find({
             $or: [
@@ -18,13 +16,17 @@ router.get('/:userId', authMiddleware, async (req, res) => {
         res.json(messages);
     } catch (error) {
         console.error(error.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ message: 'Failed to fetch messages' });
     }
-});
+};
 
-// Route to send a message
-router.post('/', authMiddleware, async (req, res) => {
+// Send a message
+exports.sendMessage = async (req, res) => {
     const { receiver, content } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(receiver)) {
+        return res.status(400).json({ message: 'Invalid receiver ID' });
+    }
 
     try {
         const newMessage = new Message({
@@ -37,36 +39,37 @@ router.post('/', authMiddleware, async (req, res) => {
         res.json(newMessage);
     } catch (error) {
         console.error(error.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ message: 'Failed to send message' });
     }
-});
+};
 
-// Send Chat Request
-router.post('/send-request', async (req, res) => {
+// Send chat request
+exports.sendChatRequest = async (req, res) => {
     const { senderId, receiverId } = req.body;
 
-    // Validate senderId and receiverId to be valid Mongo ObjectIds
     if (!mongoose.Types.ObjectId.isValid(senderId) || !mongoose.Types.ObjectId.isValid(receiverId)) {
         return res.status(400).json({ message: 'Invalid sender or receiver ID.' });
     }
 
-    // Check if a request already exists
-    const existingRequest = await ChatRequest.findOne({ sender: senderId, receiver: receiverId, status: 'pending' });
+    const receiverExists = await User.findById(receiverId);
+    if (!receiverExists) {
+        return res.status(404).json({ message: 'Receiver not found.' });
+    }
+
+    const existingRequest = await ChatRequest.findOne({ sender: senderId, receiver: receiverId, status: 'pending' }).select('_id');
     if (existingRequest) {
         return res.status(400).json({ message: 'Chat request already sent.' });
     }
 
-    // Create a new chat request
     const chatRequest = new ChatRequest({ sender: senderId, receiver: receiverId });
     await chatRequest.save();
     res.json({ success: true, message: 'Chat request sent.' });
-});
+};
 
-// Accept Chat Request
-router.post('/accept-request', async (req, res) => {
+// Accept chat request
+exports.acceptChatRequest = async (req, res) => {
     const { requestId } = req.body;
 
-    // Validate requestId to be a valid Mongo ObjectId
     if (!mongoose.Types.ObjectId.isValid(requestId)) {
         return res.status(400).json({ message: 'Invalid request ID.' });
     }
@@ -79,13 +82,12 @@ router.post('/accept-request', async (req, res) => {
     } else {
         res.status(404).json({ message: 'Chat request not found.' });
     }
-});
+};
 
-// Reject Chat Request
-router.post('/reject-request', async (req, res) => {
+// Reject chat request
+exports.rejectChatRequest = async (req, res) => {
     const { requestId } = req.body;
 
-    // Validate requestId to be a valid Mongo ObjectId
     if (!mongoose.Types.ObjectId.isValid(requestId)) {
         return res.status(400).json({ message: 'Invalid request ID.' });
     }
@@ -98,27 +100,23 @@ router.post('/reject-request', async (req, res) => {
     } else {
         res.status(404).json({ message: 'Chat request not found.' });
     }
-});
+};
 
-// Get Pending Chat Requests
-router.get('/', authMiddleware, async (req, res) => {
+// Get pending chat requests
+exports.getPendingRequests = async (req, res) => {
     try {
-        console.log(req.user, '=========>');
-        const userId = req.user.id; // Get the user ID from the authenticated user
+        const userId = req.user.id;
 
-        // Find all pending requests where the user is either the sender or receiver
         const pendingRequests = await ChatRequest.find({
             $or: [
-                { sender: userId, status: 'pending' },
-                { receiver: userId, status: 'pending' }
+                { sender: userId},
+                { receiver: userId}
             ]
-        }).populate('sender receiver', 'name email');  // Optionally populate sender and receiver details
+        }).populate('sender receiver', 'name email');
 
         res.json(pendingRequests);
     } catch (error) {
         console.error(error.message);
-        res.status(500).send('Server Error');
+        res.status(500).json({ message: 'Failed to fetch pending requests' });
     }
-});
-
-module.exports = router;
+};

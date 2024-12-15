@@ -50,8 +50,8 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', (userId) => {
         socket.join(userId);
         onlineUsers.set(userId, socket.id); 
-        // console.log(`User ${userId} joined their room`);
-
+        console.log(`User ${userId} joined their room`);
+    
         // Emit 'userOnline' to all clients when a user goes online
         io.emit('userOnline', userId);
     });
@@ -121,7 +121,8 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-
+         console.log(offlineUserId, 'offlineUserId');
+         
         // Emit 'userOffline' to all clients when a user goes offline
         if (offlineUserId) {
             io.emit('userOffline', offlineUserId);

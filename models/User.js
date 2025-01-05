@@ -15,6 +15,19 @@ const UserSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    mobile: {
+        type: String,
+        default: ''
+    },
+    profileImage: {
+        type: String,
+        default: ''
+    },
+    gender: {
+        type: String,
+        enum: ['male', 'female', 'other'],
+        default: ''
+    },
     date: {
         type: Date,
         default: Date.now
